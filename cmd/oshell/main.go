@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/chzyer/readline"
 	lua "github.com/yuin/gopher-lua"
+	"github.com/yuin/gopher-lua/parse"
 )
 
 func main() {
@@ -28,9 +30,17 @@ func runShell(l *lua.LState, in io.ReadCloser, sout, serr io.WriteCloser) {
 		fmt.Fprintln(serr)
 	}
 	log.SetOutput(rl.Stderr())
+	defaultPrompt := "> "
+	expectingInput := "  "
+	code := bytes.Buffer{}
 	for {
 		line, err := rl.Readline()
 		if errors.Is(err, readline.ErrInterrupt) {
+			if code.Len() > 0 {
+				rl.SetPrompt(expectingInput)
+				code.Reset()
+				continue
+			}
 			log.Print("Goodbye!")
 			return
 		} else if err != nil {
@@ -41,17 +51,22 @@ func runShell(l *lua.LState, in io.ReadCloser, sout, serr io.WriteCloser) {
 			log.Print("Goodbye")
 			return
 		}
-		err = l.DoString(line)
+		code.WriteString(line)
+
+		_, err = parse.Parse(bytes.NewBuffer(code.Bytes()), "_shell")
 		if err != nil {
-			log.Printf("[Error]> \t %v", err)
+			// invalid code
+			// just move to the next line
+			rl.SetPrompt(expectingInput)
+			continue
 		} else {
-			top := l.GetTop()
-			if top != 0 {
-				fmt.Fprintf(rl, "< %v", l.ToString(top))
-				fmt.Fprintln(rl)
-			} else {
-				fmt.Fprintln(rl)
-			}
+			rl.SetPrompt(defaultPrompt)
 		}
+		err = l.DoString(code.String())
+		if err != nil {
+			fmt.Fprintf(rl, "[Error]\t%v", err)
+			fmt.Fprintln(rl)
+		}
+		code.Reset()
 	}
 }
