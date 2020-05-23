@@ -25,3 +25,6 @@ gotidy: build
 
 watch:
 	modd
+
+build-shell:
+	go build ./cmd/oshell
