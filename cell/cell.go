@@ -80,6 +80,11 @@ func (c *Cell) ID() ID {
 	return c.id
 }
 
+// Name of a cell
+func (c *Cell) Name() string {
+	return c.name
+}
+
 // Emit the list of arguments to the given cell/receptor
 func (c *Cell) Emit(to ID, recpt Receptor, sig Signal) {
 	c.m.ExchangeOut(Carrier{
