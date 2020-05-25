@@ -11,9 +11,7 @@ stop-test-containers:
 monitor-redis:
 	docker exec -ti "organic-redis" /bin/sh
 
-test: | stop-test-containers start-test-containers run-tests stop-test-containers
-
-run-tests:
+test:
 	go test ./...
 
 build:
