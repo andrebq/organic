@@ -11,7 +11,13 @@ type (
 	moduleDef map[string]lua.LGFunction
 )
 
-func ModuleName() string { return "organic" }
+const (
+	moduleName   = "organic"
+	idTypeName   = moduleName + "_Id"
+	cellTypeName = moduleName + "_Cell"
+)
+
+func ModuleName() string { return moduleName }
 
 func Loader(c cell.Cell) func(*lua.LState) int {
 	return func(l *lua.LState) int {
@@ -20,7 +26,7 @@ func Loader(c cell.Cell) func(*lua.LState) int {
 
 		cellUserData := l.NewUserData()
 		cellUserData.Value = &c
-		l.SetMetatable(cellUserData, l.GetTypeMetatable(computeTypeName("Cell")))
+		l.SetMetatable(cellUserData, l.GetTypeMetatable(cellTypeName))
 
 		l.SetField(m, "cell", cellUserData)
 		l.Push(m)
@@ -29,14 +35,18 @@ func Loader(c cell.Cell) func(*lua.LState) int {
 }
 
 func registerTypes(l *lua.LState, module *lua.LTable) {
-	registerType(l, module, "Cell", moduleDef{}, cellMethods)
+	registerType(l, cellTypeName, moduleDef{}, cellInstanceMethods)
+	l.SetField(module, "id", registerType(l, idTypeName, moduleDef{
+		"of":         idOf,
+		"__tostring": idToString,
+	}, idInstanceMethods))
 }
 
-func registerType(l *lua.LState, module *lua.LTable, name string, typeMethods, instanceMethods moduleDef) {
-	mt := l.NewTypeMetatable(computeTypeName(name))
+func registerType(l *lua.LState, name string, typeMethods, instanceMethods moduleDef) *lua.LTable {
+	mt := l.NewTypeMetatable(name)
 	l.SetFuncs(mt, typeMethods)
-	l.SetField(module, name, mt)
 	l.SetField(mt, "__index", l.SetFuncs(l.NewTable(), instanceMethods))
+	return mt
 }
 
 func computeTypeName(name string) string {
@@ -58,10 +68,51 @@ func cellSend(l *lua.LState) int {
 		return 0
 	}
 	println("Cell ", cell.Name(), " with id ", cell.ID().String(), " sending to %v", to.String())
+	l.Pop(l.GetTop())
 	return 0
 }
 
-var module = moduleDef{}
-var cellMethods = moduleDef{
+func idToString(l *lua.LState) int {
+	st := stateHelper{l}
+	id, ok := st.CheckCellID(1)
+	if !ok {
+		return 0
+	}
+	l.Pop(l.GetTop())
+	l.Push(lua.LString(id.String()))
+	return 1
+}
+
+func parseId(l *lua.LState) int {
+	str := l.CheckString(1)
+	l.Pop(l.GetTop())
+
+	id, err := cell.DecodeIDString(str)
+	if err != nil {
+		l.RaiseError(err.Error())
+		return 0
+	}
+	ud := l.NewUserData()
+	ud.Value = id
+	l.SetMetatable(ud, l.GetTypeMetatable(idTypeName))
+	l.Push(ud)
+	return 1
+}
+
+func idOf(l *lua.LState) int {
+	str := l.CheckString(1)
+	l.Pop(l.GetTop())
+	ud := l.NewUserData()
+	ud.Value = cell.ComputeCellID(str)
+	l.SetMetatable(ud, l.GetTypeMetatable(idTypeName))
+	l.Push(ud)
+	return 1
+}
+
+var module = moduleDef{
+	"parse_id": parseId,
+}
+var cellInstanceMethods = moduleDef{
 	"send": cellSend,
 }
+var idInstanceMethods = moduleDef{}

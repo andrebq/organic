@@ -3,6 +3,7 @@ package cell
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"io"
 )
 
@@ -54,7 +55,7 @@ type (
 
 // Grow constructs a new cell and uses the given Membrane.
 func Grow(name string, medium Medium) Cell {
-	id := computeCellID(name)
+	id := ComputeCellID(name)
 	c := Cell{
 		name: name,
 		id:   id,
@@ -63,7 +64,8 @@ func Grow(name string, medium Medium) Cell {
 	return c
 }
 
-func computeCellID(name string) (id ID) {
+// ComputeCellID returns the id of a cell with the given name
+func ComputeCellID(name string) (id ID) {
 	h := sha256.New()
 	io.WriteString(h, name)
 	h.Sum(id[:0])
@@ -100,6 +102,23 @@ func (c *Cell) Recv() (ID, Receptor, Signal) {
 	var car Carrier
 	c.m.ExchangeIn(&car)
 	return car.From, car.Receptor, car.Signal
+}
+
+// DecodeIDString tries to read a valid ID from a base64 encoded string
+//
+// The string must match the result of calling id.String
+func DecodeIDString(str string) (id ID, err error) {
+	var buf []byte
+	buf, err = base64.URLEncoding.DecodeString(str)
+	if err != nil {
+		return
+	}
+	if len(buf) != len(id[:]) {
+		err = errors.New("string MUST represent a 32-byte array")
+		return
+	}
+	copy(id[:], buf)
+	return
 }
 
 // ID returns the base64 encoding of a given ID
